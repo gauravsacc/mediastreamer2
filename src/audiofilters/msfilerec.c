@@ -24,6 +24,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #include "mediastreamer2/msfilerec.h"
 #include "waveheader.h"
 #include "asyncrw.h"
+#include <sys/types.h>
+#include <sys/socket.h>
 
 
 static int rec_close(MSFilter *f, void *arg);
@@ -31,11 +33,13 @@ static void write_wav_header(int fd, int rate, int nchannels, int size);
 
 typedef struct RecState{
 	int fd;
+	int sockfd;
 	int rate;
 	int nchannels;
 	int size;
 	int max_size;
 	char *mime;
+	struct addrinfo *dst_info;
 	MSAsyncWriter *writer;
 	MSRecorderState state;
 	bool_t swap;
@@ -44,11 +48,13 @@ typedef struct RecState{
 static void rec_init(MSFilter *f){
 	RecState *s=ms_new0(RecState,1);
 	s->fd=-1;
+	s->sockfd=-1;
 	s->rate=8000;
 	s->nchannels = 1;
 	s->size=0;
 	s->max_size=0;
 	s->state=MSRecorderClosed;
+	s->dst_info=NULL;
 	s->mime = "pcm";
 	s->swap = FALSE;
 	f->data=s;
@@ -69,28 +75,45 @@ static void swap_bytes(unsigned char *bytes, int len){
 static void rec_process(MSFilter *f){
 	RecState *s=(RecState*)f->data;
 	mblk_t *m;
-	
 	ms_mutex_lock(&f->lock);
 	while((m=ms_queue_get(f->inputs[0]))!=NULL){
-		
-		if (s->state==MSRecorderRunning){
-			int len=(int)(m->b_wptr-m->b_rptr);
-			int max_size_reached = 0;
-			if (s->max_size!=0 && s->size+len > s->max_size) {
-				len = s->max_size - s->size;
-				max_size_reached = 1;
-			}
-			if (s->swap) swap_bytes(m->b_wptr,len);
-			ms_async_reader_write(s->writer,m);
-			s->size+=len;
-			if (max_size_reached) {
-				ms_warning("MSFileRec: Maximum size (%d) has been reached. closing file.",s->max_size);
-				_rec_close(s);
-				ms_filter_notify_no_arg(f,MS_RECORDER_MAX_SIZE_REACHED);
-			}
-		}else freemsg(m);
-	}
-	ms_mutex_unlock(&f->lock);
+   if (s->sockfd != -1 )
+	 {
+			int error;
+	 		msgpullup(m, -1);
+
+	 		error = bctbx_sendto(
+	 			s->sockfd,
+	 			m->b_rptr,
+	 			(int) (m->b_wptr - m->b_rptr),
+	 			0,
+	 			s->dst_info->ai_addr,
+	 			(socklen_t)s->dst_info->ai_addrlen
+	 		);
+	 		if (error == -1) {
+	 			ms_error("Failed to send UDP packet: errno=%d", errno);
+	 		}
+	 }
+	 else{
+			if (s->state==MSRecorderRunning){
+				int len=(int)(m->b_wptr-m->b_rptr);
+				int max_size_reached = 0;
+				if (s->max_size!=0 && s->size+len > s->max_size) {
+					len = s->max_size - s->size;
+					max_size_reached = 1;
+				}
+				if (s->swap) swap_bytes(m->b_wptr,len);
+				ms_async_reader_write(s->writer,m);
+				s->size+=len;
+				if (max_size_reached) {
+					ms_warning("MSFileRec: Maximum size (%d) has been reached. closing file.",s->max_size);
+					_rec_close(s);
+					ms_filter_notify_no_arg(f,MS_RECORDER_MAX_SIZE_REACHED);
+				}
+			}else freemsg(m);
+		}
+ }
+ ms_mutex_unlock(&f->lock);
 }
 
 static int rec_get_length(const char *file, int *length){
@@ -106,13 +129,59 @@ static int rec_get_length(const char *file, int *length){
 	return ret;
 }
 
+
+static int __socket_open(RecState *d, const char* filename) {
+	char ipAddress[512];
+	char ipPort[64];
+
+	int err;
+	struct addrinfo hints;
+	int family = PF_INET;
+	char *c = strchr (filename, ':');
+  if (!c){
+		ms_error("__socket_open() failed as filename not in ip:port format %s\n",filename);
+		return -1;
+	}
+	strncpy(ipAddress, filename, c - filename);
+	ipAddress[c - filename] = '\0';
+	strcpy(ipPort, c+1);
+
+	/* Try to get the address family of the host (PF_INET or PF_INET6). */
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = PF_UNSPEC;
+	hints.ai_flags = AI_NUMERICHOST;
+	err = getaddrinfo(ipAddress, NULL, &hints, &d->dst_info);
+	memset(&hints,0,sizeof(hints));
+	hints.ai_socktype = SOCK_DGRAM;
+	if (err == 0) {
+		hints.ai_family = d->dst_info->ai_family;
+		freeaddrinfo(d->dst_info);
+	}
+	err=getaddrinfo(ipAddress,ipPort,&hints,&d->dst_info);
+	if (err!=0){
+		ms_error("getaddrinfo() failed: %s\n",gai_strerror(err));
+		return -1;
+	}
+	d->sockfd = socket(family,SOCK_DGRAM,0);
+	if (d->sockfd==-1){
+		ms_error("socket() failed: %d\n",errno);
+		return -1;
+	}
+	return 0;
+}
+
 static int rec_open(MSFilter *f, void *arg){
 	RecState *s=(RecState*)f->data;
 	const char *filename=(const char*)arg;
 	int flags;
-	
-	if (s->fd!=-1) rec_close(f,NULL);
-	
+	if (s->fd!=-1 || s->sockfd !=-1) rec_close(f,NULL);
+	// if filename contains ':' , assume ip:port
+	 if (strchr(filename,':'))
+	 {
+		__socket_open(s,filename);
+		return 0;
+	 }
+
 	if (access(filename,R_OK|W_OK)==0){
 		flags=O_WRONLY|O_BINARY;
 		if (rec_get_length(filename,&s->size)>0){
@@ -146,6 +215,8 @@ static int rec_open(MSFilter *f, void *arg){
 
 static int rec_start(MSFilter *f, void *arg){
 	RecState *s=(RecState*)f->data;
+	if (s->sockfd != -1)
+		return 0;
 	if (s->state!=MSRecorderPaused){
 		ms_error("MSFileRec: cannot start, state=%i",s->state);
 		return -1;
@@ -158,6 +229,10 @@ static int rec_start(MSFilter *f, void *arg){
 
 static int rec_stop(MSFilter *f, void *arg){
 	RecState *s=(RecState*)f->data;
+
+	if (s->sockfd != -1)
+	  return 0;
+
 	ms_mutex_lock(&f->lock);
 	s->state=MSRecorderPaused;
 	ms_mutex_unlock(&f->lock);
@@ -189,13 +264,20 @@ static void write_wav_header(int fd, int rate, int nchannels, int size){
 
 static void _rec_close(RecState *s){
 	s->state=MSRecorderClosed;
-	if (s->fd!=-1){
-		ms_async_writer_destroy(s->writer);
-		s->writer = NULL;
+	if (s->fd!=-1 ){
 		write_wav_header(s->fd, s->rate, s->nchannels, s->size);
 		close(s->fd);
 		s->fd=-1;
 	}
+	if (s->sockfd!=-1)
+	{
+		close(s->sockfd);
+		s->sockfd=-1;
+	}
+	if (s->dst_info != NULL)  {
+		freeaddrinfo(s->dst_info);
+	}
+
 }
 
 static int rec_close(MSFilter *f, void *arg){
@@ -242,7 +324,8 @@ static int rec_get_nchannels(MSFilter *f, void *arg){
 
 static void rec_uninit(MSFilter *f){
 	RecState *s=(RecState*)f->data;
-	if (s->fd!=-1) rec_close(f,NULL);
+	if (s->fd!=-1 || s->sockfd!=-1)
+		rec_close(f,NULL);
 	ms_free(s);
 }
 
