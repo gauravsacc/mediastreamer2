@@ -75,10 +75,8 @@ static void swap_bytes(unsigned char *bytes, int len){
 static void rec_process(MSFilter *f){
 	RecState *s=(RecState*)f->data;
 	mblk_t *m;
-
 	ms_mutex_lock(&f->lock);
 	while((m=ms_queue_get(f->inputs[0]))!=NULL){
-
    if (s->sockfd != -1 )
 	 {
 			int error;
@@ -92,7 +90,6 @@ static void rec_process(MSFilter *f){
 	 			s->dst_info->ai_addr,
 	 			(socklen_t)s->dst_info->ai_addrlen
 	 		);
-
 	 		if (error == -1) {
 	 			ms_error("Failed to send UDP packet: errno=%d", errno);
 	 		}
@@ -134,22 +131,18 @@ static int rec_get_length(const char *file, int *length){
 
 
 static int __socket_open(RecState *d, const char* filename) {
-  char ipAddress[512];
-  char ipPort[64];
+	char ipAddress[512];
+	char ipPort[64];
 
 	int err;
 	struct addrinfo hints;
 	int family = PF_INET;
-
-  char *c = strchr (filename, ':');
-
+	char *c = strchr (filename, ':');
   if (!c){
 		ms_error("__socket_open() failed as filename not in ip:port format %s\n",filename);
 		return -1;
 	}
-
-
-  strncpy(ipAddress, filename, c - filename);
+	strncpy(ipAddress, filename, c - filename);
 	ipAddress[c - filename] = '\0';
 	strcpy(ipPort, c+1);
 
@@ -164,36 +157,29 @@ static int __socket_open(RecState *d, const char* filename) {
 		hints.ai_family = d->dst_info->ai_family;
 		freeaddrinfo(d->dst_info);
 	}
-
 	err=getaddrinfo(ipAddress,ipPort,&hints,&d->dst_info);
-
 	if (err!=0){
 		ms_error("getaddrinfo() failed: %s\n",gai_strerror(err));
 		return -1;
 	}
-
 	d->sockfd = socket(family,SOCK_DGRAM,0);
 	if (d->sockfd==-1){
 		ms_error("socket() failed: %d\n",errno);
 		return -1;
 	}
-
 	return 0;
 }
-
 
 static int rec_open(MSFilter *f, void *arg){
 	RecState *s=(RecState*)f->data;
 	const char *filename=(const char*)arg;
 	int flags;
-
 	if (s->fd!=-1 || s->sockfd !=-1) rec_close(f,NULL);
-
-   // if filename contains ':' , assume ip:port
+	// if filename contains ':' , assume ip:port
 	 if (strchr(filename,':'))
 	 {
-		 __socket_open(s,filename);
-    return 0;
+		__socket_open(s,filename);
+		return 0;
 	 }
 
 	if (access(filename,R_OK|W_OK)==0){
@@ -229,10 +215,8 @@ static int rec_open(MSFilter *f, void *arg){
 
 static int rec_start(MSFilter *f, void *arg){
 	RecState *s=(RecState*)f->data;
-
-  if (s->sockfd != -1)
-	  return 0;
-
+	if (s->sockfd != -1)
+		return 0;
 	if (s->state!=MSRecorderPaused){
 		ms_error("MSFileRec: cannot start, state=%i",s->state);
 		return -1;
@@ -280,7 +264,6 @@ static void write_wav_header(int fd, int rate, int nchannels, int size){
 
 static void _rec_close(RecState *s){
 	s->state=MSRecorderClosed;
-
 	if (s->fd!=-1 ){
 		write_wav_header(s->fd, s->rate, s->nchannels, s->size);
 		close(s->fd);
@@ -341,9 +324,8 @@ static int rec_get_nchannels(MSFilter *f, void *arg){
 
 static void rec_uninit(MSFilter *f){
 	RecState *s=(RecState*)f->data;
-
-	if (s->fd!=-1 || s->sockfd!=-1 ) rec_close(f,NULL);
-
+	if (s->fd!=-1 || s->sockfd!=-1)
+		rec_close(f,NULL);
 	ms_free(s);
 }
 
