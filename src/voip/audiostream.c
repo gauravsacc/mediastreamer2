@@ -263,7 +263,7 @@ void audio_stream_prepare_sound(AudioStream *stream, MSSndCard *playcard, MSSndC
 	} else {
 		stream->ms.voidsink=ms_factory_create_filter(stream->ms.factory,  MS_VOID_SINK_ID);
 		ms_filter_link(stream->dummy,0,stream->ms.voidsink,0);
-		
+
 	}
 	if (stream->ms.sessions.ticker == NULL) media_stream_start_ticker(&stream->ms);
 	ms_ticker_attach(stream->ms.sessions.ticker,stream->dummy);
@@ -878,7 +878,7 @@ int audio_stream_start_from_io(AudioStream *stream, RtpProfile *profile, const c
 		ms_error("Sample rate is unknown for RTP side !");
 		return -1;
 	}
-	
+
 	if (stream->features == 0) {
 		MSPinFormat sndread_format = {0};
 		MSPinFormat rtpsend_format = {0};
@@ -894,7 +894,7 @@ int audio_stream_start_from_io(AudioStream *stream, RtpProfile *profile, const c
 	}
 	do_ts_adjustments = !skip_encoder_and_decoder;
 	ms_filter_call_method(stream->ms.rtpsend, MS_RTP_SEND_ENABLE_TS_ADJUSTMENT, &do_ts_adjustments);
-	
+
 	if (!skip_encoder_and_decoder) {
 		stream->ms.encoder=ms_factory_create_encoder(stream->ms.factory, pt->mime_type);
 		stream->ms.decoder=ms_factory_create_decoder(stream->ms.factory, pt->mime_type);
@@ -1003,7 +1003,7 @@ int audio_stream_start_from_io(AudioStream *stream, RtpProfile *profile, const c
 		if (stream->write_resampler == NULL) stream->write_resampler = ms_factory_create_filter(stream->ms.factory, MS_RESAMPLE_ID);
 		resampler_missing = stream->write_resampler == NULL;
 	}
-	
+
 	if (resampler_missing){
 		ms_fatal("AudioStream: no resampler implementation found, but resampler is required to perform the AudioStream. "
 			"Does mediastreamer2 was compiled with libspeex dependency ?");
@@ -1078,7 +1078,7 @@ int audio_stream_start_from_io(AudioStream *stream, RtpProfile *profile, const c
 		/*configure equalizer if needed*/
 		MSDevicesInfo *devices = ms_factory_get_devices_info(stream->ms.factory);
 		SoundDeviceDescription *device = ms_devices_info_get_sound_device_description(devices);
-		
+
 		audio_stream_set_mic_gain_db(stream, 0);
 		audio_stream_set_spk_gain_db(stream, 0);
 		if (device && device->hacks) {
@@ -1165,7 +1165,7 @@ int audio_stream_start_from_io(AudioStream *stream, RtpProfile *profile, const c
 			if (ms_filter_call_method(stream->ms.decoder, MS_DECODER_ENABLE_PLC, &decoder_enable_plc) != 0) {
 				ms_warning(" MS_DECODER_ENABLE_PLC on stream %p function error ", stream);
 			}
-			
+
 		}
 		stream->plc = NULL;
 	}
@@ -1366,6 +1366,13 @@ MSFilter * audio_stream_get_local_player(AudioStream *st) {
 	return st->local_player;
 }
 
+int audio_stream_get_rec_local_port(AudioStream *st) {
+	if (ms_filter_get_id(st->soundwrite)==MS_FILE_REC_ID){
+		 return ms_filter_call_method(st->soundwrite, MS_FILTER_GET_REC_LOCAL_PORT, 0);
+	}
+	return 0;
+}
+
 void audio_stream_record(AudioStream *st, const char *name){
 	if (ms_filter_get_id(st->soundwrite)==MS_FILE_REC_ID){
 		ms_filter_call_method_noarg(st->soundwrite,MS_FILE_REC_CLOSE);
@@ -1476,7 +1483,7 @@ AudioStream *audio_stream_new_with_sessions(MSFactory *factory, const MSMediaStr
 
 	stream->ms.type = MSAudio;
 	media_stream_init(&stream->ms,factory, sessions);
-	
+
 	ms_factory_enable_statistics(factory, TRUE);
 	ms_factory_reset_statistics(factory);
 
@@ -1918,4 +1925,3 @@ void audio_stream_set_audio_route(AudioStream *stream, MSAudioRoute route) {
 		}
 	}
 }
-

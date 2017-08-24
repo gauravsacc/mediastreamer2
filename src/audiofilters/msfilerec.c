@@ -34,6 +34,7 @@ static void write_wav_header(int fd, int rate, int nchannels, int size);
 typedef struct RecState{
 	int fd;
 	int sockfd;
+	int local_port;
 	int rate;
 	int nchannels;
 	int size;
@@ -49,6 +50,7 @@ static void rec_init(MSFilter *f){
 	RecState *s=ms_new0(RecState,1);
 	s->fd=-1;
 	s->sockfd=-1;
+	s->local_port=0;
 	s->rate=8000;
 	s->nchannels = 1;
 	s->size=0;
@@ -129,7 +131,6 @@ static int rec_get_length(const char *file, int *length){
 	return ret;
 }
 
-
 static int __socket_open(RecState *d, const char* filename) {
 	char ipAddress[512];
 	char ipPort[64];
@@ -137,6 +138,9 @@ static int __socket_open(RecState *d, const char* filename) {
 	int err;
 	struct addrinfo hints;
 	int family = PF_INET;
+	struct sockaddr_in sin = {};
+	socklen_t slen;
+	short unsigned int port;
 	char *c = strchr (filename, ':');
   if (!c){
 		ms_error("__socket_open() failed as filename not in ip:port format %s\n",filename);
@@ -167,7 +171,15 @@ static int __socket_open(RecState *d, const char* filename) {
 		ms_error("socket() failed: %d\n",errno);
 		return -1;
 	}
-	return 0;
+        sin.sin_family = AF_INET;
+        sin.sin_addr.s_addr = htonl(INADDR_ANY);
+        sin.sin_port = 0;
+	/* Bind to get address of local port*/
+        bind(d->sockfd, (struct sockaddr *)&sin, sizeof(sin));
+        slen = sizeof(sin);
+        getsockname(d->sockfd, (struct sockaddr *)&sin, &slen);
+        d->local_port = ntohs(sin.sin_port);
+	return port;
 }
 
 static int rec_open(MSFilter *f, void *arg){
@@ -178,8 +190,7 @@ static int rec_open(MSFilter *f, void *arg){
 	// if filename contains ':' , assume ip:port
 	 if (strchr(filename,':'))
 	 {
-		__socket_open(s,filename);
-		return 0;
+		return __socket_open(s,filename);
 	 }
 
 	if (access(filename,R_OK|W_OK)==0){
@@ -322,6 +333,11 @@ static int rec_get_nchannels(MSFilter *f, void *arg){
 	return 0;
 }
 
+static int rec_get_localport(MSFilter *f, void *arg){
+	RecState *d=(RecState*)f->data;
+	return d->local_port;
+}
+
 static void rec_uninit(MSFilter *f){
 	RecState *s=(RecState*)f->data;
 	if (s->fd!=-1 || s->sockfd!=-1)
@@ -358,6 +374,7 @@ static MSFilterMethod rec_methods[]={
 	{	MS_FILTER_SET_NCHANNELS	,	rec_set_nchannels	},
 	{	MS_FILTER_GET_SAMPLE_RATE,	rec_get_sr	},
 	{	MS_FILTER_GET_NCHANNELS	,	rec_get_nchannels	},
+	{	MS_FILTER_GET_REC_LOCAL_PORT,	rec_get_localport	},
 	{	MS_FILE_REC_OPEN	,	rec_open	},
 	{	MS_FILE_REC_START	,	rec_start	},
 	{	MS_FILE_REC_STOP	,	rec_stop	},

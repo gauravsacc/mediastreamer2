@@ -714,6 +714,7 @@ typedef struct _MSPinFormat{
 /* pass value of type MSRtpPayloadPickerContext copied by the filter*/
 #define MS_FILTER_SET_RTP_PAYLOAD_PICKER MS_FILTER_BASE_METHOD(27,void*)
 #define MS_FILTER_SET_OUTPUT_NCHANNELS	MS_FILTER_BASE_METHOD(28,int)
+#define MS_FILTER_GET_REC_LOCAL_PORT MS_FILTER_BASE_METHOD(29, int)
 
 
 /** @} */
