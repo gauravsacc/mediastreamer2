@@ -179,6 +179,7 @@ static int __socket_open(RecState *d, const char* filename) {
   slen = sizeof(sin);
   getsockname(d->sockfd, (struct sockaddr *)&sin, &slen);
   d->local_port = ntohs(sin.sin_port);
+
 	return port;
 }
 
