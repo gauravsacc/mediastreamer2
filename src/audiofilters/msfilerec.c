@@ -171,14 +171,15 @@ static int __socket_open(RecState *d, const char* filename) {
 		ms_error("socket() failed: %d\n",errno);
 		return -1;
 	}
-        sin.sin_family = AF_INET;
-        sin.sin_addr.s_addr = htonl(INADDR_ANY);
-        sin.sin_port = 0;
+  sin.sin_family = AF_INET;
+  sin.sin_addr.s_addr = htonl(INADDR_ANY);
+  sin.sin_port = 0;
 	/* Bind to get address of local port*/
-        bind(d->sockfd, (struct sockaddr *)&sin, sizeof(sin));
-        slen = sizeof(sin);
-        getsockname(d->sockfd, (struct sockaddr *)&sin, &slen);
-        d->local_port = ntohs(sin.sin_port);
+  bind(d->sockfd, (struct sockaddr *)&sin, sizeof(sin));
+  slen = sizeof(sin);
+  getsockname(d->sockfd, (struct sockaddr *)&sin, &slen);
+  d->local_port = ntohs(sin.sin_port);
+
 	return port;
 }
 
