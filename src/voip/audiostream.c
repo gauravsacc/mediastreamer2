@@ -946,6 +946,10 @@ int audio_stream_start_from_io(AudioStream *stream, RtpProfile *profile, const c
 		}else{
 			ms_message("Full stereo enabled in this audiostream.");
 		}
+		//Set sample_rate 16K for opus 16K
+		if (stream->ms.target_bitrate<=0 && pt->normal_bitrate == 16000) {
+			sample_rate = pt->normal_bitrate;
+		}
 	}
 	stream->sample_rate=sample_rate;
 	stream->nchannels=nchannels;
