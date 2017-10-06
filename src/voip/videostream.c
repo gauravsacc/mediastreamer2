@@ -18,6 +18,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
 #include <math.h>
+#include <stdlib.h>
 
 #include "mediastreamer2/mediastream.h"
 #include "mediastreamer2/msfilter.h"
@@ -324,14 +325,19 @@ VideoStream *video_stream_new_with_sessions(MSFactory* factory, const MSMediaStr
 	if (ms_factory_lookup_filter_by_id(stream->ms.factory, MS_MKV_RECORDER_ID)){
 
 		stream->tee3=ms_factory_create_filter(stream->ms.factory, MS_TEE_ID);
-		stream->recorder_output=ms_factory_create_filter(stream->ms.factory, MS_ITC_SINK_ID);
+		if (getenv("VIDEO_RECORDER_DEFAULT_MKV"))
+		{
+			ms_message("Creating MS_MKV_RECORDER_ID filter for video");
+			stream->recorder_output=ms_factory_create_filter(stream->ms.factory, MS_MKV_RECORDER_ID);
+		}else{
+			ms_message("Creating MS_ITC_SINK_ID filter for video");
+			stream->recorder_output=ms_factory_create_filter(stream->ms.factory, MS_ITC_SINK_ID);
+		}
 
 	}
 
 	rtp_session_set_rtcp_xr_media_callbacks(stream->ms.sessions.rtp_session, &rtcp_xr_media_cbs);
-
 	stream->staticimage_webcam_fps_optimization = TRUE;
-
 	return stream;
 }
 
