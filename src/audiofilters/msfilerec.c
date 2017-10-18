@@ -96,7 +96,7 @@ static void rec_process(MSFilter *f){
 	 			ms_error("Failed to send UDP packet: errno=%d", errno);
 	 		}
 	 }
-	 else{
+	if (s->fd != -1) {
 			if (s->state==MSRecorderRunning){
 				int len=(int)(m->b_wptr-m->b_rptr);
 				int max_size_reached = 0;
@@ -142,7 +142,7 @@ static int __socket_open(RecState *d, const char* filename) {
 	socklen_t slen;
 	short unsigned int port;
 	char *c = strchr (filename, ':');
-  if (!c){
+	if (!c){
 		ms_error("__socket_open() failed as filename not in ip:port format %s\n",filename);
 		return -1;
 	}
@@ -185,14 +185,33 @@ static int __socket_open(RecState *d, const char* filename) {
 
 static int rec_open(MSFilter *f, void *arg){
 	RecState *s=(RecState*)f->data;
-	const char *filename=(const char*)arg;
+	char *filename=(char*)arg;
+	char recorderIPPort[512];
+	int countColonsFilename=0;
 	int flags;
 	if (s->fd!=-1 || s->sockfd !=-1) rec_close(f,NULL);
-	// if filename contains ':' , assume ip:port
-	 if (strchr(filename,':'))
+	// if filename contains 2 ':', write to file and also forward to ip:port
+	for (unsigned int i=0; i< strlen(filename);i ++){
+		if (filename[i]==':')
+			countColonsFilename++;
+	}
+	recorderIPPort[0]=0;
+	if (countColonsFilename == 2)
+	{
+		char * firstColon = strchr(filename,':');
+		*firstColon = 0;
+		firstColon++;
+		strcpy(recorderIPPort,firstColon);
+	}else if (countColonsFilename == 1) {
+		strcpy(recorderIPPort, filename);
+		filename[0] = 0;
+	}
+	if (strlen(recorderIPPort))
 	 {
-		return __socket_open(s,filename);
+		__socket_open(s,recorderIPPort);
 	 }
+	 if (!strlen(filename))
+		 return 0;
 
 	if (access(filename,R_OK|W_OK)==0){
 		flags=O_WRONLY|O_BINARY;
@@ -227,7 +246,7 @@ static int rec_open(MSFilter *f, void *arg){
 
 static int rec_start(MSFilter *f, void *arg){
 	RecState *s=(RecState*)f->data;
-	if (s->sockfd != -1)
+	if (s->fd == -1)
 		return 0;
 	if (s->state!=MSRecorderPaused){
 		ms_error("MSFileRec: cannot start, state=%i",s->state);
@@ -242,7 +261,7 @@ static int rec_start(MSFilter *f, void *arg){
 static int rec_stop(MSFilter *f, void *arg){
 	RecState *s=(RecState*)f->data;
 
-	if (s->sockfd != -1)
+	if (s->fd  == -1)
 	  return 0;
 
 	ms_mutex_lock(&f->lock);
