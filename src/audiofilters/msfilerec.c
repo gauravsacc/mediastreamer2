@@ -140,7 +140,6 @@ static int __socket_open(RecState *d, const char* filename) {
 	int family = PF_INET;
 	struct sockaddr_in sin = {};
 	socklen_t slen;
-	short unsigned int port;
 	char *c = strchr (filename, ':');
 	if (!c){
 		ms_error("__socket_open() failed as filename not in ip:port format %s\n",filename);
@@ -171,60 +170,62 @@ static int __socket_open(RecState *d, const char* filename) {
 		ms_error("socket() failed: %d\n",errno);
 		return -1;
 	}
-  sin.sin_family = AF_INET;
-  sin.sin_addr.s_addr = htonl(INADDR_ANY);
-  sin.sin_port = 0;
-	/* Bind to get address of local port*/
-  bind(d->sockfd, (struct sockaddr *)&sin, sizeof(sin));
-  slen = sizeof(sin);
-  getsockname(d->sockfd, (struct sockaddr *)&sin, &slen);
-  d->local_port = ntohs(sin.sin_port);
-
-	return port;
+  	sin.sin_family = AF_INET;
+  	sin.sin_addr.s_addr = htonl(INADDR_ANY);
+  	sin.sin_port = 0;
+		/* Bind to get address of local port*/
+  	bind(d->sockfd, (struct sockaddr *)&sin, sizeof(sin));
+  	slen = sizeof(sin);
+  	getsockname(d->sockfd, (struct sockaddr *)&sin, &slen);
+  	d->local_port = ntohs(sin.sin_port);
+	return d->local_port;
 }
 
 static int rec_open(MSFilter *f, void *arg){
 	RecState *s=(RecState*)f->data;
 	char *filename=(char*)arg;
 	char recorderIPPort[512];
+	char localfilename[512];
 	int countColonsFilename=0;
 	int flags;
+	
+	strcpy(localfilename, filename);
 	if (s->fd!=-1 || s->sockfd !=-1) rec_close(f,NULL);
-	// if filename contains 2 ':', write to file and also forward to ip:port
-	for (unsigned int i=0; i< strlen(filename);i ++){
-		if (filename[i]==':')
+	// if localfilename contains 2 ':', write to file and also forward to ip:port
+	for (unsigned int i=0; i< strlen(localfilename);i ++){
+		if (localfilename[i]==':')
 			countColonsFilename++;
 	}
 	recorderIPPort[0]=0;
 	if (countColonsFilename == 2)
 	{
-		char * firstColon = strchr(filename,':');
+		char * firstColon = strchr(localfilename,':');
 		*firstColon = 0;
 		firstColon++;
 		strcpy(recorderIPPort,firstColon);
 	}else if (countColonsFilename == 1) {
-		strcpy(recorderIPPort, filename);
-		filename[0] = 0;
+		strcpy(recorderIPPort, localfilename);
+		localfilename[0] = 0;
 	}
 	if (strlen(recorderIPPort))
-	 {
+	{
 		__socket_open(s,recorderIPPort);
-	 }
-	 if (!strlen(filename))
-		 return 0;
+	}
+	if (!strlen(localfilename))
+		return 0;
 
-	if (access(filename,R_OK|W_OK)==0){
+	if (access(localfilename,R_OK|W_OK)==0){
 		flags=O_WRONLY|O_BINARY;
-		if (rec_get_length(filename,&s->size)>0){
+		if (rec_get_length(localfilename,&s->size)>0){
 			ms_message("Opening wav file in append mode, current data size is %i",s->size);
 		}
 	}else{
 		flags=O_WRONLY|O_CREAT|O_TRUNC|O_BINARY;
 		s->size=0;
 	}
-	s->fd=open(filename,flags, S_IRUSR|S_IWUSR);
+	s->fd=open(localfilename,flags, S_IRUSR|S_IWUSR);
 	if (s->fd==-1){
-		ms_warning("Cannot open %s: %s",filename,strerror(errno));
+		ms_warning("Cannot open %s: %s",localfilename,strerror(errno));
 		return -1;
 	}
 	if (s->size>0){
@@ -236,7 +237,7 @@ static int rec_open(MSFilter *f, void *arg){
 			}
 		}else ms_error("fstat() failed: %s",strerror(errno));
 	}
-	ms_message("MSFileRec: recording into %s",filename);
+	ms_message("MSFileRec: recording into %s",localfilename);
 	s->writer = ms_async_writer_new(s->fd);
 	ms_mutex_lock(&f->lock);
 	s->state=MSRecorderPaused;
