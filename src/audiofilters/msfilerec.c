@@ -359,6 +359,34 @@ static int rec_get_localport(MSFilter *f, void *arg){
 	return d->local_port;
 }
 
+static int rec_set_localport(MSFilter *f, void *arg){
+	RecState *d=(RecState*)f->data;
+	int family = PF_INET;
+	struct sockaddr_in sin = {};
+	socklen_t slen;
+	ms_mutex_lock(&f->lock);
+
+	if (d->sockfd!=-1)
+	{
+		close(d->sockfd);
+		d->sockfd = socket(family,SOCK_DGRAM,0);
+		if (d->sockfd==-1){
+			ms_mutex_unlock(&f->lock);
+			ms_error("socket() failed: %d\n",errno);
+			return -1;
+		}
+		sin.sin_family = AF_INET;
+		sin.sin_addr.s_addr = htonl(INADDR_ANY);
+		sin.sin_port =  htons(*(int *)arg);
+		bind(d->sockfd, (struct sockaddr *)&sin, sizeof(sin));
+		slen = sizeof(sin);
+		getsockname(d->sockfd, (struct sockaddr *)&sin, &slen);
+		d->local_port = ntohs(sin.sin_port);
+	}
+	ms_mutex_unlock(&f->lock);
+	return d->local_port;
+}
+
 static void rec_uninit(MSFilter *f){
 	RecState *s=(RecState*)f->data;
 	if (s->fd!=-1 || s->sockfd!=-1)
@@ -396,6 +424,7 @@ static MSFilterMethod rec_methods[]={
 	{	MS_FILTER_GET_SAMPLE_RATE,	rec_get_sr	},
 	{	MS_FILTER_GET_NCHANNELS	,	rec_get_nchannels	},
 	{	MS_FILTER_GET_REC_LOCAL_PORT,	rec_get_localport	},
+	{	MS_FILTER_SET_REC_LOCAL_PORT,	rec_set_localport	},
 	{	MS_FILE_REC_OPEN	,	rec_open	},
 	{	MS_FILE_REC_START	,	rec_start	},
 	{	MS_FILE_REC_STOP	,	rec_stop	},

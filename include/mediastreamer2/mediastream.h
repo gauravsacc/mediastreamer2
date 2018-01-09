@@ -469,6 +469,7 @@ MS2_PUBLIC int audio_stream_start_full(AudioStream *stream, RtpProfile *profile,
 MS2_PUBLIC void audio_stream_play(AudioStream *st, const char *name);
 MS2_PUBLIC void audio_stream_record(AudioStream *st, const char *name);
 MS2_PUBLIC int audio_stream_get_rec_local_port(AudioStream *);
+MS2_PUBLIC int audio_stream_set_rec_local_port(AudioStream *, int port);
 
 static MS2_INLINE void audio_stream_set_rtcp_information(AudioStream *st, const char *cname, const char *tool) {
 	media_stream_set_rtcp_information(&st->ms, cname, tool);

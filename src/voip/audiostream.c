@@ -1377,6 +1377,13 @@ int audio_stream_get_rec_local_port(AudioStream *st) {
 	return 0;
 }
 
+int audio_stream_set_rec_local_port(AudioStream *st, int port) {
+	if (ms_filter_get_id(st->soundwrite)==MS_FILE_REC_ID){
+		 return ms_filter_call_method(st->soundwrite, MS_FILTER_SET_REC_LOCAL_PORT, &port);
+	}
+	return 0;
+}
+
 void audio_stream_record(AudioStream *st, const char *name){
 	if (ms_filter_get_id(st->soundwrite)==MS_FILE_REC_ID){
 		ms_filter_call_method_noarg(st->soundwrite,MS_FILE_REC_CLOSE);
